@@ -1,4 +1,4 @@
-﻿namespace SiteMonitor.Helpers.Loger
+﻿namespace SiteMonitor.Helpers
 {
     public class LogInfo
     {

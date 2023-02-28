@@ -1,6 +1,4 @@
-using Microsoft.Extensions.Hosting;
 using SiteMonitor.Models;
-using SiteMonitor.Serve;
 
 var builder = WebApplication.CreateBuilder(args);
 

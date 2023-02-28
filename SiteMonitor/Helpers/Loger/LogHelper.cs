@@ -1,70 +1,46 @@
 ﻿using System.Collections.Concurrent;
 
-namespace SiteMonitor.Helpers.Loger
+namespace SiteMonitor.Helpers
 {
     public class LogHelper
     {
-        public ConcurrentQueue<LogInfo> LoggerInfos { get; private set; } = new ConcurrentQueue<LogInfo>();
-        /// <summary>
-        /// 日志目录
-        /// </summary>
-        private string logPath;
-        /// <summary>
-        /// 日志文件开头名
-        /// </summary>
-        private string logNameStart;
-        /// <summary>
-        /// 备份数量
-        /// </summary>
-        private int copiesCount;
-        /// <summary>
-        /// 当前文件名
-        /// </summary>
-        private string logfileName;
-        /// <summary>
-        /// 日志写出等级
-        /// </summary>
-        private LoggerType logLevel;
 
-        /// <summary>
-        /// 日志文件名的格式化方式
-        /// </summary>
-        private string logFileNameFaormat;
+        private readonly ConcurrentQueue<LogInfo> loggerInfos = new ConcurrentQueue<LogInfo>();
+        private readonly string logPath;
+        private readonly string logNameStart;
+        private readonly int copiesCount;
+        private readonly string logFileNameFormat;
+        private readonly LoggerType logLevel;
+        private readonly string logFilePath;
+        private readonly string logFileNameFaormat;
 
-
-
-        private void InitializeLog(string logPath, string logNameStart, int copiesCount, LoggerType level, string logFileNameFaormat)
+        public LogHelper(string logPath = "logs", string logNameStart = "log", int copiesCount = 1,  LoggerType logLevel = LoggerType.Trace, string logFileNameFormat = "yyyy-MM-dd")
         {
             this.logPath = logPath;
-            if (!File.Exists(Path.Combine(AppContext.BaseDirectory, logPath)))
-            {
-                Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, logPath));
-            }
             this.logNameStart = logNameStart;
             this.copiesCount = copiesCount;
-            this.logFileNameFaormat = logFileNameFaormat;
-        }
+            this.logLevel = logLevel;
+            this.logFileNameFormat = logFileNameFormat;
 
-        public LogHelper(string logPath = "logs", string logNameStart = "log", int copiesCount = 1, LoggerType level = LoggerType.Trace, string logFileNameFaormat = "yyyy-MM-dd")
-        {
-            InitializeLog(logPath, logNameStart, copiesCount, level, logFileNameFaormat);
-        }
+            var baseDirectory = AppContext.BaseDirectory;
+            var logDirectory = Path.Combine(baseDirectory, logPath);
+            if (!Directory.Exists(logDirectory))
+            {
+                Directory.CreateDirectory(logDirectory);
+            }
+            logFilePath = Path.Combine(logDirectory, $"{logNameStart}-{DateTime.UtcNow.ToString(logFileNameFormat)}.log");
 
-        public LogHelper()
-        {
-            InitializeLog("logs", "log", 1, LoggerType.Trace, "yyyy-MM-dd");
         }
-
 
         public void Clear()
         {
-            LoggerInfos = new ConcurrentQueue<LogInfo>();
+            loggerInfos.Clear();
         }
 
         public void Log(string message, LoggerType loggerType = LoggerType.Warning)
         {
 
-            LoggerInfos.Enqueue(new LogInfo
+            loggerInfos.Enqueue(new LogInfo
             {
                 Exception = null,
                 Message = message,
@@ -74,7 +50,7 @@ namespace SiteMonitor.Helpers.Loger
         }
         public void Log(Exception exception, string? message = null)
         {
-            LoggerInfos.Enqueue(new LogInfo
+            loggerInfos.Enqueue(new LogInfo
             {
                 Exception = exception,
                 Message = message ?? exception.Message,
@@ -108,7 +84,7 @@ namespace SiteMonitor.Helpers.Loger
         }
         public void Log(string message, Exception exception, LoggerType loggerType, DateTime dateTime, string tag = null)
         {
-            LoggerInfos.Enqueue(new LogInfo
+            loggerInfos.Enqueue(new LogInfo
             {
                 Tag = tag,
                 Exception = exception,
@@ -121,11 +97,11 @@ namespace SiteMonitor.Helpers.Loger
 
         private void WriteLog()
         {
-            // Get current log file name based on current date
+
             var currentDate = DateTime.UtcNow.AddHours(8).ToString(logFileNameFaormat);
             var currentFileName = $"{logNameStart}_{currentDate}.log";
 
-            // Create log file if it does not exist
+
             var logFilePath = Path.Combine(AppContext.BaseDirectory, logPath);
             Directory.CreateDirectory(logFilePath);
             var filePath = Path.Combine(logFilePath, currentFileName);
@@ -134,7 +110,7 @@ namespace SiteMonitor.Helpers.Loger
                 File.Create(filePath).Close();
             }
 
-            // Remove oldest log files if there are too many
+
             var logFiles = Directory.GetFiles(logFilePath, $"{logNameStart}_*.log")
                 .OrderByDescending(f => f)
                 .Skip(copiesCount - 1)
@@ -147,10 +123,10 @@ namespace SiteMonitor.Helpers.Loger
                 }
             }
 
-            // Write pending log messages to the log file
+
             using (var writer = new StreamWriter(filePath, true))
             {
-                while (LoggerInfos.TryDequeue(out var loggerInfo))
+                while (loggerInfos.TryDequeue(out var loggerInfo))
                 {
                     if (loggerInfo.LoggerType >= logLevel)
                     {
