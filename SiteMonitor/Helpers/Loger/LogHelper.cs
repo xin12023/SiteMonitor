@@ -1,141 +1,114 @@
-﻿using System.Collections.Concurrent;
+﻿using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Linq;
 
 namespace SiteMonitor.Helpers
 {
     public class LogHelper
     {
+        private readonly ConcurrentQueue<LogInfo> _loggerInfos = new ConcurrentQueue<LogInfo>();
+        private readonly string _logPath;
+        private readonly int _copiesCount;
+        private readonly string _logFileNameFormat;
+        private readonly string _defaultLogName = "run";
+        private readonly LoggerType _logLevel;
+        private readonly SemaphoreSlim _semaphoreSlim = new SemaphoreSlim(1);
 
-        private readonly ConcurrentQueue<LogInfo> loggerInfos = new ConcurrentQueue<LogInfo>();
-        private readonly string logPath;
-        private readonly string logNameStart;
-        private readonly int copiesCount;
-        private readonly string logFileNameFormat;
-        private readonly LoggerType logLevel;
-        private readonly string logFilePath;
-        private readonly string logFileNameFaormat;
-
-        public LogHelper(string logPath = "logs", string logNameStart = "log", int copiesCount = 1,  LoggerType logLevel = LoggerType.Trace, string logFileNameFormat = "yyyy-MM-dd")
+        public LogHelper(string logPath = "logs", int copiesCount = 1, LoggerType logLevel = LoggerType.Trace, string logFileNameFormat = "yyyy-MM-dd")
         {
-            this.logPath = logPath;
-            this.logNameStart = logNameStart;
-            this.copiesCount = copiesCount;
-            this.logLevel = logLevel;
-            this.logFileNameFormat = logFileNameFormat;
+            _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, logPath);
+            _copiesCount = copiesCount;
+            _logLevel = logLevel;
+            _logFileNameFormat = logFileNameFormat;
 
-            var baseDirectory = AppContext.BaseDirectory;
-            var logDirectory = Path.Combine(baseDirectory, logPath);
-            if (!Directory.Exists(logDirectory))
+            if (!Directory.Exists(this._logPath))
             {
-                Directory.CreateDirectory(logDirectory);
+                Directory.CreateDirectory(this._logPath);
             }
-            logFilePath = Path.Combine(logDirectory, $"{logNameStart}-{DateTime.UtcNow.ToString(logFileNameFormat)}.log");
 
+            //Task.Factory.StartNew(() => WriteLogsAsync(), TaskCreationOptions.LongRunning);
+            _ = Task.Run(() => WriteLogsAsync());
         }
 
-        public void Clear()
+        public void Log(string message, LoggerType loggerType = LoggerType.Warning, Exception? exception = null, string? tag = null)
         {
-            loggerInfos.Clear();
-        }
-
-        public void Log(string message, LoggerType loggerType = LoggerType.Warning)
-        {
-
-            loggerInfos.Enqueue(new LogInfo
+            _loggerInfos.Enqueue(new LogInfo
             {
-                Exception = null,
+                Tag = tag ?? _defaultLogName,
+                Exception = exception,
                 Message = message,
                 LoggerType = loggerType,
                 Time = DateTime.UtcNow,
             });
         }
-        public void Log(Exception exception, string? message = null)
+
+        public void Trace(string message, Exception? exception = null, string? tag = null) => Log(message, LoggerType.Trace, exception, tag);
+        public void Debug(string message, Exception? exception = null, string? tag = null) => Log(message, LoggerType.Debug, exception, tag);
+        public void Information(string message, Exception? exception = null, string? tag = null) => Log(message, LoggerType.Information, exception, tag);
+        public void Warning(string message, Exception? exception = null, string? tag = null) => Log(message, LoggerType.Warning, exception, tag);
+        public void Error(string message, Exception? exception = null, string? tag = null) => Log(message, LoggerType.Error, exception, tag);
+        public void Fatal(string message, Exception? exception = null, string? tag = null) => Log(message, LoggerType.Fatal, exception, tag);
+
+        private async Task WriteLogToFileAsync(string filePath, LogInfo logInfo)
         {
-            loggerInfos.Enqueue(new LogInfo
+            await _semaphoreSlim.WaitAsync();
+            try
             {
-                Exception = exception,
-                Message = message ?? exception.Message,
-                LoggerType = LoggerType.Error,
-                Time = DateTime.UtcNow,
-            });
-        }
-        public void Trace(string message, Exception? exception = null, string? tag = null)
-        {
-            Log(message, exception, LoggerType.Trace, DateTime.UtcNow, tag: tag);
-        }
-        public void Debug(string message, Exception? exception = null, string? tag = null)
-        {
-            Log(message, exception, LoggerType.Debug, DateTime.UtcNow, tag: tag);
-        }
-        public void Information(string message, Exception? exception = null, string? tag = null)
-        {
-            Log(message, exception, LoggerType.Information, DateTime.UtcNow, tag: tag);
-        }
-        public void Warning(string message, Exception? exception = null, string? tag = null)
-        {
-            Log(message, exception, LoggerType.Warning, DateTime.UtcNow, tag: tag);
-        }
-        public void Error(string message, Exception? exception = null, string? tag = null)
-        {
-            Log(message, exception, LoggerType.Error, DateTime.UtcNow, tag: tag);
-        }
-        public void Fatal(string message, Exception? exception = null, string? tag = null)
-        {
-            Log(message, exception, LoggerType.Fatal, DateTime.UtcNow, tag: tag);
-        }
-        public void Log(string message, Exception exception, LoggerType loggerType, DateTime dateTime, string tag = null)
-        {
-            loggerInfos.Enqueue(new LogInfo
-            {
-                Tag = tag,
-                Exception = exception,
-                Message = message,
-                LoggerType = loggerType,
-                Time = dateTime,
-            });
-            WriteLog();
-        }
-
-        private void WriteLog()
-        {
-
-            var currentDate = DateTime.UtcNow.AddHours(8).ToString(logFileNameFaormat);
-            var currentFileName = $"{logNameStart}_{currentDate}.log";
-
-
-            var logFilePath = Path.Combine(AppContext.BaseDirectory, logPath);
-            Directory.CreateDirectory(logFilePath);
-            var filePath = Path.Combine(logFilePath, currentFileName);
-            if (!File.Exists(filePath))
-            {
-                File.Create(filePath).Close();
-            }
-
-
-            var logFiles = Directory.GetFiles(logFilePath, $"{logNameStart}_*.log")
-                .OrderByDescending(f => f)
-                .Skip(copiesCount - 1)
-                .ToList();
-            foreach (var file in logFiles)
-            {
-                if (Path.GetFileName(file) != currentFileName)
+                using var writer = File.AppendText(filePath);
+                await writer.WriteLineAsync($"[{logInfo.Time:yyyy-MM-dd HH:mm:ss.fff}] {logInfo.LoggerType}: {logInfo.Message}");
+                if (logInfo.Exception != null)
                 {
-                    File.Delete(file);
+                    await writer.WriteLineAsync(logInfo.Exception.ToString());
                 }
             }
-
-
-            using (var writer = new StreamWriter(filePath, true))
+            finally
             {
-                while (loggerInfos.TryDequeue(out var loggerInfo))
+                _semaphoreSlim.Release();
+            }
+        }
+
+        private async Task WriteLogsAsync()
+        {
+            while (true)
+            {
+                while (_loggerInfos.TryDequeue(out var logInfo))
                 {
-                    if (loggerInfo.LoggerType >= logLevel)
+                    if ((int)logInfo.LoggerType < (int)_logLevel) continue;
+                    var fileName = logInfo.Tag ?? _defaultLogName;
+                    var filePath = Path.Combine(_logPath, $"{fileName}_{logInfo.Time.ToString(_logFileNameFormat)}.log");
+
+                    // 等待可用的信号量
+                    await _semaphoreSlim.WaitAsync();
+                    try
                     {
-                        writer.WriteLine($"{loggerInfo.Time.ToString()} [{loggerInfo.LoggerType}] {loggerInfo.Tag ?? ""}: {loggerInfo.Message}");
-                        if (loggerInfo.Exception != null)
-                        {
-                            writer.WriteLine(loggerInfo.Exception.ToString());
-                        }
+                        await WriteLogToFileAsync(filePath, logInfo);
+                        DeleteOldLogFiles(fileName);
                     }
+                    finally
+                    {
+                        // 释放信号量
+                        _semaphoreSlim.Release();
+                    }
+                }
+                
+                // 无日志时等待一段时间
+                await Task.Delay(300);
+            }
+        }
+
+        private void DeleteOldLogFiles(string fileName)
+        {
+            var files = Directory.EnumerateFiles(_logPath, $"{fileName}_*.log")
+                .OrderByDescending(f => File.GetLastWriteTime(f))
+                .ToList();
+
+            if (files.Count > _copiesCount)
+            {
+                for (int i = _copiesCount; i < files.Count; i++)
+                {
+                    File.Delete(files[i]);
                 }
             }
         }
