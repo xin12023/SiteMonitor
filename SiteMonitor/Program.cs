@@ -7,9 +7,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 
 // 映射配置信息到 AppConfig 类中
+
 builder.Services.Configure<MonitorConfig>(builder.Configuration.GetSection("MonitorConfig"));
 
 //注册日志服务
+
 builder.Services.AddSingleton<LogHelper>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -20,10 +22,9 @@ builder.Services.AddSingleton<LogHelper>(sp =>
     return new LogHelper(logPath, copiesCount, logLevel, logFileNameFormat);
 });
 
-
 //注册后台服务
-builder.Services.AddHostedService<SiteBackgroundService>();
 
+builder.Services.AddHostedService<SiteBackgroundService>();
 
 var app = builder.Build();
 

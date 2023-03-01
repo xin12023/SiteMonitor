@@ -30,27 +30,17 @@ public class SiteBackgroundService : IHostedService, IDisposable
         _configReloadToken = _configMonitor.OnChange(config =>
         {
             _config = config;
-            _logger.Information($"修改了配置文件 {_config}");
+            _logger.Information($"修改了配置文件 {Newtonsoft.Json.JsonConvert.SerializeObject(_config)}");
         });
 
-        _logger.Information($"服务配置当前为: {_config}");
+        _logger.Information($"服务配置当前为: {Newtonsoft.Json.JsonConvert.SerializeObject(_config)}");
 
-        await RunTaskAsync(_cancellationTokenSource.Token);
+        _ = RunTaskAsync(_cancellationTokenSource.Token);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.Information("停止监控服务");
-        _cancellationTokenSource?.Cancel();
-        try
-        {
-            // 等待正在运行的任务完成或 5 秒后超时。
-            await Task.WhenAny(_runningTask, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
-        }
-        catch (OperationCanceledException)
-        {
-            // 忽略取消异常。
-        }
     }
 
     public void Dispose()
@@ -60,8 +50,6 @@ public class SiteBackgroundService : IHostedService, IDisposable
         _cancellationTokenSource?.Cancel();
         _cancellationTokenSource?.Dispose();
     }
-
-    private readonly Task _runningTask;
 
     private async Task RunTaskAsync(CancellationToken cancellationToken)
     {
@@ -73,11 +61,12 @@ public class SiteBackgroundService : IHostedService, IDisposable
             {
                 if (_config.Enable)
                 {
-                    _logger.Information($"Running monitor task at {DateTimeOffset.UtcNow}");
+                    //_logger.Information($"Running monitor task at {DateTimeOffset.UtcNow}");
 
                     // Run your periodic task logic here.
 
-                    _logger.Information($"Monitor task completed at {DateTimeOffset.UtcNow}");
+                    await Task.Delay(TimeSpan.FromSeconds(_config.Interval), cancellationToken);
+                    //_logger.Information($"Monitor task completed at {DateTimeOffset.UtcNow}");
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(_config.Interval), cancellationToken);
@@ -85,7 +74,7 @@ public class SiteBackgroundService : IHostedService, IDisposable
         }
         catch (OperationCanceledException)
         {
-           //忽略异常任务
+            //忽略异常任务
         }
         finally
         {

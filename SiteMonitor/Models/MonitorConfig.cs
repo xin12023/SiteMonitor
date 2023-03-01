@@ -50,5 +50,9 @@
         /// 后台任务的检查间隔
         /// </summary>
         public int Interval { get; set; }
+        /// <summary>
+        /// 日志等级
+        /// </summary>
+        public int LogLevel { get; set; }
     }
 }

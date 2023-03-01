@@ -78,21 +78,9 @@ namespace SiteMonitor.Helpers
                     if ((int)logInfo.LoggerType < (int)_logLevel) continue;
                     var fileName = logInfo.Tag ?? _defaultLogName;
                     var filePath = Path.Combine(_logPath, $"{fileName}_{logInfo.Time.ToString(_logFileNameFormat)}.log");
-
-                    // 等待可用的信号量
-                    await _semaphoreSlim.WaitAsync();
-                    try
-                    {
-                        await WriteLogToFileAsync(filePath, logInfo);
-                        DeleteOldLogFiles(fileName);
-                    }
-                    finally
-                    {
-                        // 释放信号量
-                        _semaphoreSlim.Release();
-                    }
+                    await WriteLogToFileAsync(filePath, logInfo);
+                    DeleteOldLogFiles(fileName);
                 }
-                
                 // 无日志时等待一段时间
                 await Task.Delay(300);
             }
