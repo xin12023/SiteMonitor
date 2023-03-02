@@ -7,6 +7,10 @@
         /// </summary>
         public string? Name { get; set; }
         /// <summary>
+        /// 日志文件名
+        /// </summary>
+        public string? LogName { get; set; }
+        /// <summary>
         /// 请求方式
         /// </summary>
         public string? Method { get; set; }
@@ -33,7 +37,7 @@
         /// <summary>
         /// 协议头
         /// </summary>
-        public string[]? Headers { get; set; }
+        public Headers[]? Headers { get; set; }
         /// <summary>
         /// 检查间隔(秒)
         /// </summary>
@@ -70,4 +74,19 @@
         /// </summary>
         public int Error { get; set; }
     }
+
+    public class Headers
+    {
+        /// <summary>
+        /// 检查方式  Code 状态码, Time 耗时, Content 内容包含, NotContains 内容不包含
+        /// </summary>
+        public string? Name { get; set; }
+        /// <summary>
+        /// 检查方式的值
+        /// </summary>
+        public string? Value { get; set; }
+
+    }
+
+
 }

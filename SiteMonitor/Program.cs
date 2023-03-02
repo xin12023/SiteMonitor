@@ -26,6 +26,11 @@ builder.Services.AddSingleton<LogHelper>(sp =>
 
 builder.Services.AddHostedService<SiteBackgroundService>();
 
+//×¢²áTG·þÎñ
+builder.Services.AddSingleton<TgHelper>();
+
+
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

@@ -54,5 +54,9 @@
         /// 日志等级
         /// </summary>
         public int LogLevel { get; set; }
+        /// <summary>
+        /// 站点文件夹
+        /// </summary>
+        public string? SiteFolder { get; set; }
     }
 }
