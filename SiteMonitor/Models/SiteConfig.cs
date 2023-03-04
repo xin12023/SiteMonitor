@@ -7,6 +7,8 @@ namespace SiteMonitor.Models
 
     public class SiteConfig
     {
+        [SugarColumn(IsPrimaryKey = true, IsIdentity = true)]
+        public int Id { get; set; }
         /// <summary>
         /// 站点名称
         /// </summary>
