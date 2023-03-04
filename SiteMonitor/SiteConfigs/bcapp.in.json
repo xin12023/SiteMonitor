@@ -24,28 +24,23 @@
     "Methods": [
         {
             "Type": "Code",
-            "Value": "502",
-            "Error": 0
+            "Value": "502"
         },
         {
             "Type": "Code",
-            "Value": "404",
-            "Error": 0
+            "Value": "404"
         },
         {
             "Type": "Time",
-            "Value": "3000",
-            "Error": 0
+            "Value": "3000"
         },
         {
             "Type": "NotContains",
-            "Value": "TEST OK",
-            "Error": 0
+            "Value": "TEST OK"
         },
         {
             "Type": "Contains",
-            "Value": "TEST OK",
-            "Error": 0
+            "Value": "TEST OK"
         }
     ]
 }

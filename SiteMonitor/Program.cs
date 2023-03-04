@@ -1,3 +1,4 @@
+using SiteMonitor.Extension;
 using SiteMonitor.Helpers;
 using SiteMonitor.Models;
 
@@ -6,21 +7,25 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 
-// 映射配置信息到 AppConfig 类中
 
-builder.Services.Configure<MonitorConfig>(builder.Configuration.GetSection("MonitorConfig"));
+//// 映射配置信息到 AppConfig 类中
+//builder.Services.Configure<MonitorConfig>(builder.Configuration.GetSection("MonitorConfig"));
+
+////加载配置文件
+//var config = new ConfigurationBuilder()
+//    .SetBasePath(AppContext.BaseDirectory)
+//    .AddJsonFile("config.json", optional: true, reloadOnChange: true)
+//    .Build();
+
+////注册配置文件
+//builder.Services.Configure<TokenConfig>(config);
+
+
+
 
 //注册日志服务
 
-builder.Services.AddSingleton<LogHelper>(sp =>
-{
-    var config = sp.GetRequiredService<IConfiguration>();
-    var logPath = config.GetValue<string>("MonitorConfig:LogPath");
-    var copiesCount = config.GetValue<int>("MonitorConfig:LogCopies");
-    var logLevel = Enum.Parse<LoggerType>(config.GetValue<string>("MonitorConfig:LogLevel"), ignoreCase: true);
-    var logFileNameFormat = config.GetValue<string>("MonitorConfig:LogNameFormat");
-    return new LogHelper(logPath, copiesCount, logLevel, logFileNameFormat);
-});
+builder.Services.AddSingleton<LogHelper>();
 
 //注册后台服务
 
@@ -29,6 +34,8 @@ builder.Services.AddHostedService<SiteBackgroundService>();
 //注册TG服务
 builder.Services.AddSingleton<TgHelper>();
 
+//注册数据库连接单例
+builder.Services.AddSqlsugarSetup("SystemData");
 
 
 var app = builder.Build();

@@ -9,23 +9,25 @@ namespace SiteMonitor.Helpers
     public class LogHelper
     {
         private readonly ConcurrentQueue<LogInfo> _loggerInfos = new ConcurrentQueue<LogInfo>();
-        private readonly string _logPath;
-        private readonly int _copiesCount;
-        private readonly string _logFileNameFormat;
-        private readonly string _defaultLogName = "run";
-        private readonly LoggerType _logLevel;
         private readonly SemaphoreSlim _semaphoreSlim = new SemaphoreSlim(1);
 
-        public LogHelper(string logPath = "logs", int copiesCount = 1, LoggerType logLevel = LoggerType.Trace, string logFileNameFormat = "yyyy-MM-dd")
-        {
-            _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, logPath);
-            _copiesCount = copiesCount;
-            _logLevel = logLevel;
-            _logFileNameFormat = logFileNameFormat;
+        public string LogPath { get; set; } = "logs";
 
-            if (!Directory.Exists(this._logPath))
+        public int CopiesCount { get; set; } = 1;
+
+        public string LogFileNameFormat { get; set; } = "yyyy-MM-dd";
+
+        public string DefaultLogName { get; set; } = "run";
+
+        public LoggerType LogLevel { get; set; } = LoggerType.Trace;
+
+
+
+        public LogHelper()
+        {
+            if (!Directory.Exists(this.LogPath))
             {
-                Directory.CreateDirectory(this._logPath);
+                Directory.CreateDirectory(this.LogPath);
             }
 
             //Task.Factory.StartNew(() => WriteLogsAsync(), TaskCreationOptions.LongRunning);
@@ -36,7 +38,7 @@ namespace SiteMonitor.Helpers
         {
             _loggerInfos.Enqueue(new LogInfo
             {
-                Tag = tag ?? _defaultLogName,
+                Tag = tag ?? DefaultLogName,
                 Exception = exception,
                 Message = message,
                 LoggerType = loggerType,
@@ -75,9 +77,9 @@ namespace SiteMonitor.Helpers
             {
                 while (_loggerInfos.TryDequeue(out var logInfo))
                 {
-                    if ((int)logInfo.LoggerType < (int)_logLevel) continue;
-                    var fileName = logInfo.Tag ?? _defaultLogName;
-                    var filePath = Path.Combine(_logPath, $"{fileName}_{logInfo.Time.ToString(_logFileNameFormat)}.log");
+                    if ((int)logInfo.LoggerType < (int)LogLevel) continue;
+                    var fileName = logInfo.Tag ?? DefaultLogName;
+                    var filePath = Path.Combine(LogPath, $"{fileName}_{logInfo.Time.ToString(LogFileNameFormat)}.log");
                     await WriteLogToFileAsync(filePath, logInfo);
                     DeleteOldLogFiles(fileName);
                 }
@@ -88,13 +90,13 @@ namespace SiteMonitor.Helpers
 
         private void DeleteOldLogFiles(string fileName)
         {
-            var files = Directory.EnumerateFiles(_logPath, $"{fileName}_*.log")
+            var files = Directory.EnumerateFiles(LogPath, $"{fileName}_*.log")
                 .OrderByDescending(f => File.GetLastWriteTime(f))
                 .ToList();
 
-            if (files.Count > _copiesCount)
+            if (files.Count > CopiesCount)
             {
-                for (int i = _copiesCount; i < files.Count; i++)
+                for (int i = CopiesCount; i < files.Count; i++)
                 {
                     File.Delete(files[i]);
                 }

@@ -33,6 +33,7 @@ namespace SiteMonitor.Helpers
             _httpClient = _webProxy != null ? new HttpClient(new HttpClientHandler { UseProxy = true, Proxy = webProxy }, true) : new HttpClient();
         }
 
+
         public async Task<HttpResponseMessage> PostAsync(Uri uri, string content, CancellationToken cancellationToken, string cookie = null, string contentType = "application/x-www-form-urlencoded", string charSet = "utf-8")
         {
             return await SendAsync(HttpMethod.Post, uri, new StringContent(content, Encoding.GetEncoding(charSet), contentType), contentType, charSet,  cancellationToken, cookie);
@@ -105,5 +106,15 @@ namespace SiteMonitor.Helpers
         {
             _httpClient?.Dispose();
         }
+    }
+
+
+    public class Headers
+    {
+        public string? Name { get; set; }
+        /// <summary>
+        /// 检查方式的值
+        /// </summary>
+        public string? Value { get; set; }
     }
 }
