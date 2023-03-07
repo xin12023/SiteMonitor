@@ -25,21 +25,43 @@ public class SiteBackgroundService : IHostedService, IDisposable
         _logger = logHelper;
         _tgHelper = tgHelper;
         _db = db;
+
+        // 订阅 RunConfig 的 ConfigChanged 事件
+        RunConfig.ConfigChanged += OnConfigChanged;
+    }
+
+    private void OnConfigChanged(RunConfig sender)
+    {
+        try
+        {
+            _logger.Information("配置文件发生了变化");
+            _runConfig = sender;
+            _crontab = Crontab.Parse(_runConfig.RunCron, CronStringFormat.WithSecondsAndYears);
+            _tgHelper.Token = _runConfig.TgToken;
+            _logger.CopiesCount = _runConfig.LogCopie > 0 ? (int)_runConfig.LogCopie : 1;
+            _logger.LogPath = _runConfig.LogPath ?? "logs";
+            _logger.LogFileNameFormat = _runConfig.LogNameFormat ?? "yyyy-MM-dd";
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"更新配置信息发生异常", ex);
+        }
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.Information("启动监控服务");
         _cancellationTokenSource = new CancellationTokenSource();
-        _runConfig = await _db.Queryable<RunConfig>().FirstAsync();
-        _crontab = Crontab.Parse(_runConfig.RunCron, CronStringFormat.WithSecondsAndYears);
-        _tgHelper.Token = _runConfig.TgToken;
+        var setConfig = await _db.Queryable<RunConfig>().FirstAsync();
+        OnConfigChanged(setConfig);
         _ = RunTaskAsync(_cancellationTokenSource.Token);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.Information("停止监控服务");
+        // 取消订阅 RunConfig 的 ConfigChanged 事件
+        RunConfig.ConfigChanged -= OnConfigChanged;
         _cancellationTokenSource?.Cancel();
         return Task.CompletedTask;
     }
@@ -75,7 +97,7 @@ public class SiteBackgroundService : IHostedService, IDisposable
                 _logger.Warning($"站点[{site.Name}: {site.Url}] 检查结果: {result.Msg}", tag: site.LogName);
                 break;
         }
-        if (result.State !=  ResultState.Skip)
+        if (result.State != ResultState.Skip)
         {
             //更新最后检查时间
             site.Lasttime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -89,6 +111,7 @@ public class SiteBackgroundService : IHostedService, IDisposable
 
         if (groups?.Length == 0)
         {
+            _logger.Information($"未配置会话ID,无法发送通知");
             return;
         }
         _logger.Warning($"TG发送通知,会话 [{string.Join(",", groups)}] :  发送消息: {message}");
@@ -104,7 +127,7 @@ public class SiteBackgroundService : IHostedService, IDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var checkSites = _db.Queryable<SiteConfig>().Where(it => it.Enable).ToList();
+                var checkSites = await _db.Queryable<SiteConfig>().Where(it => it.Enable).ToListAsync();
 
                 if (checkSites.Count == 0)
                 {
