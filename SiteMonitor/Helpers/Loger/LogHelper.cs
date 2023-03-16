@@ -3,13 +3,18 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 namespace SiteMonitor.Helpers
 {
     public class LogHelper
     {
         private readonly ConcurrentQueue<LogInfo> _loggerInfos = new ConcurrentQueue<LogInfo>();
+
         private readonly SemaphoreSlim _semaphoreSlim = new SemaphoreSlim(1);
+
+        private readonly CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
+
 
         public string LogPath { get; set; } = "logs";
 
@@ -18,6 +23,8 @@ namespace SiteMonitor.Helpers
         public string LogFileNameFormat { get; set; } = "yyyy-MM-dd";
 
         public string DefaultLogName { get; set; } = "run";
+
+        public long MaxLogFileSize { get; set; } = 1024 * 1024 * 10;
 
         public LoggerType LogLevel { get; set; } = LoggerType.Trace;
 
@@ -30,8 +37,7 @@ namespace SiteMonitor.Helpers
                 Directory.CreateDirectory(this.LogPath);
             }
 
-            //Task.Factory.StartNew(() => WriteLogsAsync(), TaskCreationOptions.LongRunning);
-            _ = Task.Run(() => WriteLogsAsync());
+            Task.Run(WriteLogsAsync, _cancellationTokenSource.Token);
         }
 
         public void Log(string message, LoggerType loggerType = LoggerType.Warning, Exception? exception = null, string? tag = null)
@@ -53,16 +59,47 @@ namespace SiteMonitor.Helpers
         public void Error(string message, Exception? exception = null, string? tag = null) => Log(message, LoggerType.Error, exception, tag);
         public void Fatal(string message, Exception? exception = null, string? tag = null) => Log(message, LoggerType.Fatal, exception, tag);
 
+
+        private async Task WriteLogsAsync()
+        {
+            while (!_cancellationTokenSource.IsCancellationRequested)
+            {
+                if (_loggerInfos.TryDequeue(out var logInfo))
+                {
+                    if ((int)logInfo.LoggerType < (int)LogLevel)
+                    {
+                        continue;
+                    }
+                    var fileName = logInfo.Tag ?? DefaultLogName;
+                    var filePath = Path.Combine(LogPath, $"{fileName}_{logInfo.Time.ToString(LogFileNameFormat)}.log");
+                    await WriteLogToFileAsync(filePath, logInfo);
+                    DeleteOldLogFiles(fileName);
+                }
+                else
+                {
+                    await Task.Delay(100); // 暂停一段时间，避免线程空转消耗资源
+                }
+            }
+        }
+
         private async Task WriteLogToFileAsync(string filePath, LogInfo logInfo)
         {
             await _semaphoreSlim.WaitAsync();
             try
             {
-                using var writer = File.AppendText(filePath);
-                await writer.WriteLineAsync($"[{logInfo.Time:yyyy-MM-dd HH:mm:ss.fff}] {logInfo.LoggerType}: {logInfo.Message}");
-                if (logInfo.Exception != null)
+                using var stream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 4096, useAsync: true);
+                using var writer = new StreamWriter(stream);
+
+                if (new FileInfo(filePath).Length >= MaxLogFileSize)
                 {
-                    await writer.WriteLineAsync(logInfo.Exception.ToString());
+                    BackupLogFile(filePath);
+                    using var newStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite, 4096, useAsync: true);
+                    using var newWriter = new StreamWriter(newStream);
+                    await WriteLogInfoAsync(newWriter, logInfo);
+                }
+                else
+                {
+                    await WriteLogInfoAsync(writer, logInfo);
                 }
             }
             finally
@@ -71,27 +108,27 @@ namespace SiteMonitor.Helpers
             }
         }
 
-        private async Task WriteLogsAsync()
+        private void BackupLogFile(string filePath)
         {
-            while (true)
+            var backupFileName = $"{Path.GetFileNameWithoutExtension(filePath)}_{DateTime.Now:ddHHmmssfff}{Path.GetExtension(filePath)}";
+            var backupFilePath = Path.Combine(LogPath, backupFileName);
+            File.Replace(filePath, backupFilePath, null);
+        }
+
+        private async Task WriteLogInfoAsync(TextWriter writer, LogInfo logInfo)
+        {
+            await writer.WriteLineAsync($"[{logInfo.Time:yyyy-MM-dd HH:mm:ss.fff}] {logInfo.LoggerType}: {logInfo.Message}");
+            if (logInfo.Exception != null)
             {
-                while (_loggerInfos.TryDequeue(out var logInfo))
-                {
-                    if ((int)logInfo.LoggerType < (int)LogLevel) continue;
-                    var fileName = logInfo.Tag ?? DefaultLogName;
-                    var filePath = Path.Combine(LogPath, $"{fileName}_{logInfo.Time.ToString(LogFileNameFormat)}.log");
-                    await WriteLogToFileAsync(filePath, logInfo);
-                    DeleteOldLogFiles(fileName);
-                }
-                // 无日志时等待一段时间
-                await Task.Delay(300);
+                await writer.WriteLineAsync(logInfo.Exception.ToString());
             }
         }
 
         private void DeleteOldLogFiles(string fileName)
         {
             var files = Directory.EnumerateFiles(LogPath, $"{fileName}_*.log")
-                .OrderByDescending(f => File.GetLastWriteTime(f))
+                .OrderByDescending(f => new FileInfo(f).LastWriteTime)
+                .Skip(CopiesCount)
                 .ToList();
 
             if (files.Count > CopiesCount)
